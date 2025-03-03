@@ -46,30 +46,30 @@
 
    ```bash
    git clone https://github.com/RevMoe57/binancetradercrewai.git
-   cd binancetradercrewai
+   cd binancetradercrewai```
 
     Installer les dépendances :
 
-pip install crewai python-binance pyyaml python-dotenv
+```pip install crewai python-binance pyyaml python-dotenv```
 
 Lancer le modèle LLM localement via Ollama :
 
-    ollama run deepseek-r1:14b
+    ```ollama run deepseek-r1:14b```
 
 Configuration
 Fichier creds.env
 
 Crée un fichier nommé creds.env à la racine du projet avec le contenu suivant :
 
-BINANCE_API_KEY=ta_cle_api_binance
-BINANCE_API_SECRET=ton_secret_binance
+```BINANCE_API_KEY=ta_cle_api_binance
+BINANCE_API_SECRET=ton_secret_binance```
 
 Fichiers YAML de configuration
 
 Dans le dossier config/, crée les fichiers suivants :
 config/agents.yaml
 
-selection_agent:
+```selection_agent:
   role: "Sélecteur de crypto"
   goal: "Analyser les données de marché et choisir le meilleur shitcoin à trader"
   backstory: "Expert en trading crypto avec une connaissance approfondie des tendances du marché."
@@ -90,13 +90,13 @@ config/tasks.yaml
 
 execute_trade_task:
   action: "execute_trade"
-  output_file: "trade_order.json"
+  output_file: "trade_order.json"```
 
 Utilisation
 
 Pour lancer le projet, exécute :
 
-python3 main.py
+```python3 main.py```
 
 Le script va :
 
