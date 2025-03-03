@@ -1,0 +1,88 @@
+Trading Crew - Trading automatisé de shitcoins
+
+Ce projet expérimental te permet de trader automatiquement sur Binance en sélectionnant, via CrewAI et un LLM local (DeepSeek-R1 via Ollama), le meilleur "shitcoin" à trader.
+
+    Attention : Ce projet est fourni à titre expérimental et n'est pas un conseil financier. Teste-le sur un compte de simulation avant toute utilisation réelle et utilise-le avec précaution !
+
+Prérequis
+
+    Python 3.12 (ou version compatible)
+    Installer les packages suivants (tu peux utiliser pip) :
+        crewai
+        python-binance
+        pyyaml
+        python-dotenv
+        Autres dépendances éventuellement requises par CrewAI ou Ollama
+
+Installation
+
+    Clone le dépôt ou copie les fichiers dans un dossier, par exemple binance/.
+
+    Dans le dossier, installe les dépendances :
+
+pip install crewai python-binance pyyaml python-dotenv
+
+Assure-toi d'avoir Ollama installé et configuré sur ta machine pour lancer le modèle DeepSeek-R1 (14b). Tu peux le lancer par exemple avec :
+
+    ollama run deepseek-r1:14b
+
+Configuration
+
+    Clés Binance :
+    Crée un fichier nommé creds.env à la racine du projet avec le contenu suivant :
+
+BINANCE_API_KEY=ta_cle_api_binance
+BINANCE_API_SECRET=ton_secret_binance
+
+Fichiers de configuration CrewAI :
+Dans un dossier nommé config, place les fichiers suivants :
+
+    agents.yaml
+
+selection_agent:
+  role: "Sélecteur de crypto"
+  goal: "Analyser les données de marché et choisir le meilleur shitcoin à trader"
+  backstory: "Expert en trading crypto avec une connaissance approfondie des tendances du marché."
+  prompt: >
+    Voici quelques données de marché de crypto-monnaies USDT :
+    {market_data}
+    Parmi ces crypto-monnaies, quel est le meilleur shitcoin à trader aujourd'hui ? Réponds uniquement avec le symbole.
+  stop: "\n"
+
+order_agent:
+  role: "Exécuteur d'ordre"
+  goal: "Confirmer l'exécution d'une commande d'achat sur Binance"
+  backstory: "Agent de trading automatique, spécialisé dans l'exécution rapide des ordres."
+  prompt: "Confirme l'exécution de l'ordre d'achat sur Binance."
+  stop: "\n"
+
+tasks.yaml
+
+        execute_trade_task:
+          action: "execute_trade"
+          output_file: "trade_order.json"
+
+Utilisation
+
+Pour lancer le projet, exécute simplement :
+
+python3 main.py
+
+Le script va :
+
+    Récupérer les données de marché (les tickers se terminant par "USDT").
+    Construire un prompt à partir des données de marché et de la configuration de l'agent.
+    Utiliser le LLM local pour sélectionner le meilleur shitcoin à trader.
+    Passer un ordre d'achat via l'API Binance pour le symbole choisi.
+    Enregistrer les informations de l'ordre dans le fichier trade_order.json.
+
+Avertissements
+
+    Ce projet est expérimental.
+    Les choix faits par le LLM (et donc l'exécution d'ordres) ne garantissent pas la rentabilité ou la sécurité de tes trades.
+
+    Utilisation sur un compte réel :
+    Teste d'abord sur un compte de simulation ou en mode test avant de l'utiliser sur ton compte Binance réel.
+
+    Risques financiers :
+    Le trading de cryptomonnaies comporte des risques. N'utilise ce code que pour des expérimentations et n'investis que ce que tu es prêt à perdre.
