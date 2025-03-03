@@ -1,0 +1,3 @@
+execute_trade_task:
+  action: "execute_trade"
+  output_file: "trade_order.json"
