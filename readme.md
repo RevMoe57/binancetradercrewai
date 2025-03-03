@@ -1,6 +1,5 @@
 # BinanceTraderCrewAI
 
-![Banner](https://via.placeholder.com/1200x300?text=BinanceTraderCrewAI)
 
 **BinanceTraderCrewAI** est un projet expérimental qui combine le pouvoir des grands modèles de langage (LLM) en local via Ollama (DeepSeek-R1) avec la flexibilité de CrewAI pour automatiser le trading sur Binance. L'idée est de sélectionner automatiquement le "meilleur shitcoin" à trader en analysant les données de marché, puis de passer un ordre d'achat via l'API Binance.
 
@@ -18,9 +17,6 @@
 - [Utilisation](#utilisation)
 - [Avertissements](#avertissements)
 - [Contribuer](#contribuer)
-- [Licence](#licence)
-- [Contact](#contact)
-
 ---
 
 ## Caractéristiques
@@ -43,33 +39,33 @@
 ## Installation
 
 1. **Cloner le dépôt :**
-
-   ```bash
+```
+   bash
    git clone https://github.com/RevMoe57/binancetradercrewai.git
-   cd binancetradercrewai```
-
-    Installer les dépendances :
-
-```pip install crewai python-binance pyyaml python-dotenv```
-
+   cd binancetradercrewai
+```
+Installer les dépendances :
+```
+   pip install crewai python-binance pyyaml python-dotenv
+```
 Lancer le modèle LLM localement via Ollama :
-
-    ```ollama run deepseek-r1:14b```
-
-Configuration
+```
+    ollama run deepseek-r1:14b
+```
+## Configuration
 Fichier creds.env
 
 Crée un fichier nommé creds.env à la racine du projet avec le contenu suivant :
-
-```BINANCE_API_KEY=ta_cle_api_binance
-BINANCE_API_SECRET=ton_secret_binance```
-
+```
+BINANCE_API_KEY=ta_cle_api_binance
+BINANCE_API_SECRET=ton_secret_binance
+```
 Fichiers YAML de configuration
 
 Dans le dossier config/, crée les fichiers suivants :
 config/agents.yaml
-
-```selection_agent:
+```
+selection_agent:
   role: "Sélecteur de crypto"
   goal: "Analyser les données de marché et choisir le meilleur shitcoin à trader"
   backstory: "Expert en trading crypto avec une connaissance approfondie des tendances du marché."
@@ -90,9 +86,10 @@ config/tasks.yaml
 
 execute_trade_task:
   action: "execute_trade"
-  output_file: "trade_order.json"```
+  output_file: "trade_order.json"
+```
 
-Utilisation
+## Utilisation
 
 Pour lancer le projet, exécute :
 
@@ -106,7 +103,7 @@ Le script va :
     Utiliser le LLM local pour choisir le meilleur actif (shitcoin) à trader.
     Passer un ordre d'achat via l'API Binance et enregistrer les détails de l'ordre dans trade_order.json.
 
-Avertissements
+## Avertissements
 
     Projet Expérimental :
     Ce code est développé pour tester et expérimenter l'automatisation du trading. Il n'est pas optimisé pour une utilisation en production.
@@ -117,7 +114,7 @@ Avertissements
     Validation :
     Le choix effectué par le LLM est basé sur une analyse textuelle des données et ne garantit en aucun cas la rentabilité.
 
-Contribuer
+## Contribuer
 
 Les contributions sont les bienvenues !
 Si tu souhaites apporter des améliorations, corriger des bugs ou ajouter de nouvelles fonctionnalités, n'hésite pas à :
