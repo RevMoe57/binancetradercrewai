@@ -32,6 +32,7 @@ if not BINANCE_API_KEY or not BINANCE_API_SECRET:
 client = Client(
     BINANCE_API_KEY,
     BINANCE_API_SECRET,
+    testnet=True,
     requests_params={'timeout': 30}  # Timeout de 30 secondes
 )
 
@@ -160,18 +161,57 @@ class TradingCrew:
 
         print("Le LLM a choisi :", chosen_symbol)
 
+        # Vérification et correction du symbole
+        if "USDT" not in chosen_symbol:
+            chosen_symbol = f"{chosen_symbol}USDT"
+            print(f"Symbole ajusté : {chosen_symbol}")
+
         # Vérification du symbole pour respecter le format Binance
         if not re.fullmatch(r"^[A-Z0-9\-_.]{1,20}$", chosen_symbol):
             raise Exception(f"Symbole invalide extrait : {chosen_symbol}")
 
-        # Exemple : achat d'une quantité fixe (à adapter selon ta stratégie)
-        quantity = 10
+        # Récupérer les informations du symbole pour vérifier les restrictions de NOTIONAL et LOT_SIZE
+        symbol_info = self.client.get_symbol_info(chosen_symbol)
+        min_notional = None
+        min_qty = None
+        max_qty = None
+        step_size = None
+
+        # Rechercher les filtres de NOTIONAL et LOT_SIZE
+        for filter in symbol_info['filters']:
+            if filter['filterType'] == 'NOTIONAL':
+                min_notional = float(filter['minNotional'])
+            if filter['filterType'] == 'LOT_SIZE':
+                min_qty = float(filter['minQty'])
+                max_qty = float(filter['maxQty'])
+                step_size = float(filter['stepSize'])
+
+        # Exemple : obtenir le prix actuel
+        price = float(self.client.get_symbol_ticker(symbol=chosen_symbol)['price'])
+
+        # Calculer la quantité minimale requise pour respecter le min_notional
+        min_quantity = min_notional / price
+        min_quantity = round(min_quantity, 2)  # Arrondi à 2 décimales pour respecter les règles de quantité
+
+        # Vérifier si la quantité est en dehors des limites de lot
+        if min_quantity < min_qty:
+            min_quantity = min_qty  # Si la quantité est inférieure à la quantité minimale, ajuster
+        elif min_quantity > max_qty:
+            min_quantity = max_qty  # Si la quantité dépasse la quantité maximale, ajuster
+
+        # Arrondir la quantité à l'unité la plus proche autorisée par le step_size
+        if step_size:
+            min_quantity = math.floor(min_quantity / step_size) * step_size
+
+        print(f"Quantité ajustée pour respecter les restrictions du lot : {min_quantity} {chosen_symbol}")
+
+        # Créer l'ordre avec la quantité ajustée
         try:
             order = self.client.create_order(
                 symbol=chosen_symbol,
                 side=Client.SIDE_BUY,
                 type=Client.ORDER_TYPE_MARKET,
-                quantity=quantity
+                quantity=min_quantity
             )
         except Exception as e:
             print("Erreur lors de la création de l'ordre :", e)
@@ -179,9 +219,15 @@ class TradingCrew:
 
         print("Commande passée :", json.dumps(order, indent=2))
         task_config = self.tasks_config.get("execute_trade_task", {})
+
+        # Sérialisation de l'ordre en chaîne de caractères
+        order_str = json.dumps(order)
+
         return Task(
             config=task_config,
-            output_file="trade_order.json"
+            output_file="trade_order.json",
+            description="Commande d'achat exécutée",
+            expected_output=order_str
         )
 
 def main():
