@@ -38,6 +38,7 @@ client = Client(
 def get_usdt_tickers():
     """Récupère la liste des symboles se terminant par 'USDT'."""
     exchange_info = client.get_exchange_info()
+    print("Symboles USDT récupérés : OK")
     return [s['symbol'] for s in exchange_info['symbols'] if s['symbol'].endswith('USDT')]
 
 def get_market_data(symbols):
@@ -51,6 +52,7 @@ def get_market_data(symbols):
                 "price": float(ticker['lastPrice']),
                 "volume": float(ticker['volume'])
             }
+    print("Données de marché récupérées : OK")
     return market_data
 
 @CrewBase
@@ -71,6 +73,7 @@ class TradingCrew:
             self.tasks_config = yaml.safe_load(f)
         # Variable pour stocker le prompt final de l'agent de sélection
         self.selection_agent_prompt = None
+        print("Initialisation de TradingCrew : OK")
 
     @agent
     def selection_agent(self) -> Agent:
@@ -99,6 +102,7 @@ class TradingCrew:
         }
         # Stocke le prompt pour utilisation dans la tâche
         self.selection_agent_prompt = prompt
+        print("Agent de sélection créé : OK")
         return Agent(
             config=agent_config,
             verbose=True,
@@ -111,6 +115,7 @@ class TradingCrew:
         Agent simulé pour l'exécution de l'ordre.
         """
         config = self.agents_config.get("order_agent")
+        print("Agent d'exécution de commande créé : OK")
         return Agent(
             config=config,
             verbose=True,
@@ -123,6 +128,7 @@ class TradingCrew:
         Le manager (Crew) orchestre les agents.
         Ici, nous utilisons uniquement l'agent de sélection.
         """
+        print("Création du Crew : OK")
         return Crew(
             agents=[self.selection_agent()],
             process=Process.sequential,
@@ -142,6 +148,7 @@ class TradingCrew:
         agent_prompt = self.selection_agent_prompt
 
         # Appelle directement l'LLM avec le prompt construit
+        print("Appel au modèle LLM pour la sélection du symbole...")
         response = self.llm.call(messages=[{"role": "user", "content": agent_prompt}])
         # Extraction du symbole en prenant la dernière ligne de la réponse
         if isinstance(response, dict):
@@ -178,6 +185,7 @@ class TradingCrew:
         )
 
 def main():
+    print("Démarrage de l'exécution du trading...")
     crew_instance = TradingCrew()
     crew_instance.execute_trade_task()
     print("Trading effectué avec succès.")
