@@ -3,133 +3,115 @@ import os
 import json
 import yaml
 import re
+import math
+from datetime import datetime
 from dotenv import load_dotenv
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task
 from binance.client import Client
+import ollama  # Module pour gérer Ollama
 
-# Charge les variables d'environnement depuis creds.env
+# 🚀 Assurer que Ollama est lancé
+ollama.start_ollama()
+
+# 🛠️ Chargement des variables d'environnement
 load_dotenv('creds.env')
 
-# Supprime toute clé OpenAI pour forcer l'utilisation d'Ollama
+# 🌐 Configuration de CrewAI pour Ollama
 os.environ.pop("OPENAI_API_KEY", None)
 os.environ["CREWAI_LLM_PROVIDER"] = "ollama"
 os.environ["CREWAI_EMBEDDINGS_PROVIDER"] = "ollama"
 
-# Initialisation du LLM via Ollama avec DeepSeek-R1 14b
+# 🎯 Initialisation du modèle LLM
 llm = LLM(
-    model="ollama/deepseek-r1:14b",
+    model="ollama/deepseek-r1:1.5b",
     base_url="http://localhost:11434",
-    api_key="ollama",  # Indique que c'est en local
+    api_key="ollama",
     temperature=0.3
 )
 
-# Initialisation du client Binance avec timeout augmenté
+# 🔑 Vérification des clés API Binance
 BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY")
 BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET")
 if not BINANCE_API_KEY or not BINANCE_API_SECRET:
-    raise Exception("Merci de définir BINANCE_API_KEY et BINANCE_API_SECRET dans creds.env")
+    raise Exception("\033[91m[ERREUR]\033[0m Merci de définir BINANCE_API_KEY et BINANCE_API_SECRET dans creds.env")
+
+# 📡 Initialisation du client Binance
 client = Client(
     BINANCE_API_KEY,
     BINANCE_API_SECRET,
     testnet=True,
-    requests_params={'timeout': 30}  # Timeout de 30 secondes
+    tld='com',
+    requests_params={'timeout': 30}
 )
 
+def log_step(message):
+    """Affiche un log avec timestamp."""
+    print(f"\033[94m[{datetime.now().strftime('%H:%M:%S')}]\033[0m {message}")
+
 def get_usdt_tickers():
-    """Récupère la liste des symboles se terminant par 'USDT'."""
+    """Récupère les symboles USDT depuis Binance."""
+    log_step("Récupération des symboles USDT...")
     exchange_info = client.get_exchange_info()
-    print("Symboles USDT récupérés : OK")
-    return [s['symbol'] for s in exchange_info['symbols'] if s['symbol'].endswith('USDT')]
+    tickers = [s['symbol'] for s in exchange_info['symbols'] if s['symbol'].endswith('USDT')]
+    log_step("\033[92m✔ Symboles USDT récupérés\033[0m")
+    return tickers
 
 def get_market_data(symbols):
-    """Récupère les données de marché pour chaque symbole."""
+    """Récupère les données de marché pour les symboles donnés."""
+    log_step("Récupération des données de marché...")
     tickers = client.get_ticker()
-    market_data = {}
-    for ticker in tickers:
-        sym = ticker['symbol']
-        if sym in symbols:
-            market_data[sym] = {
-                "price": float(ticker['lastPrice']),
-                "volume": float(ticker['volume'])
-            }
-    print("Données de marché récupérées : OK")
+    market_data = {
+        t['symbol']: {"price": float(t['lastPrice']), "volume": float(t['volume'])}
+        for t in tickers if t['symbol'] in symbols
+    }
+    log_step("\033[92m✔ Données de marché récupérées\033[0m")
     return market_data
 
 @CrewBase
 class TradingCrew:
-    """
-    Crew pour trader automatiquement sur Binance en sélectionnant le meilleur shitcoin.
-    Le manager orchestre plusieurs agents.
-    """
     def __init__(self):
+        log_step("📦 Initialisation de TradingCrew...")
         self.llm = llm
         self.client = client
         self.usdt_symbols = get_usdt_tickers()
         self.market_data = get_market_data(self.usdt_symbols)
-        # Charger la configuration des agents et des tâches depuis les fichiers YAML
+
         with open("config/agents.yaml", "r") as f:
             self.agents_config = yaml.safe_load(f)
         with open("config/tasks.yaml", "r") as f:
             self.tasks_config = yaml.safe_load(f)
-        # Variable pour stocker le prompt final de l'agent de sélection
+
         self.selection_agent_prompt = None
-        print("Initialisation de TradingCrew : OK")
+        log_step("\033[92m✔ TradingCrew initialisé\033[0m")
 
     @agent
     def selection_agent(self) -> Agent:
-        """
-        Agent qui analyse les données de marché et choisit le meilleur shitcoin à trader.
-        """
+        log_step("🤖 Création de l'agent de sélection...")
         config = self.agents_config.get("selection_agent")
         prompt_template = config.get("prompt")
-        # Construit une chaîne contenant les données de marché (limité à 10 entrées)
-        market_data_str = ""
-        count = 0
-        for symbol, data in self.market_data.items():
-            if count >= 10:
-                break
-            market_data_str += f"{symbol}: Prix = {data['price']}, Volume = {data['volume']}\n"
-            count += 1
-        # Remplace le placeholder {market_data} dans le prompt
-        prompt = prompt_template.replace("{market_data}", market_data_str)
-        # On recrée une config pour l'agent
-        agent_config = {
-            "role": config.get("role"),
-            "goal": config.get("goal"),
-            "backstory": config.get("backstory"),
-            "prompt": prompt,
-            "stop": config.get("stop")
-        }
-        # Stocke le prompt pour utilisation dans la tâche
-        self.selection_agent_prompt = prompt
-        print("Agent de sélection créé : OK")
-        return Agent(
-            config=agent_config,
-            verbose=True,
-            llm=self.llm
+        market_data_str = "\n".join(
+            f"{sym}: Prix={data['price']}, Volume={data['volume']}"
+            for sym, data in list(self.market_data.items())[:10]
         )
-
-    @agent
-    def order_agent(self) -> Agent:
-        """
-        Agent simulé pour l'exécution de l'ordre.
-        """
-        config = self.agents_config.get("order_agent")
-        print("Agent d'exécution de commande créé : OK")
+        prompt = prompt_template.replace("{market_data}", market_data_str)
+        self.selection_agent_prompt = prompt
+        log_step("\033[92m✔ Agent de sélection prêt\033[0m")
         return Agent(
-            config=config,
+            config={
+                "role": config.get("role"),
+                "goal": config.get("goal"),
+                "backstory": config.get("backstory"),
+                "prompt": prompt,
+                "stop": config.get("stop"),
+            },
             verbose=True,
             llm=self.llm
         )
 
     @crew
     def crew(self) -> Crew:
-        """
-        Le manager (Crew) orchestre les agents.
-        Ici, nous utilisons uniquement l'agent de sélection.
-        """
-        print("Création du Crew : OK")
+        log_step("🚀 Création du Crew...")
         return Crew(
             agents=[self.selection_agent()],
             process=Process.sequential,
@@ -138,47 +120,34 @@ class TradingCrew:
 
     @task
     def execute_trade_task(self) -> Task:
-        """
-        Tâche qui combine la sélection et l'exécution du trade.
-        Elle utilise l'agent de sélection pour obtenir le symbole,
-        puis exécute l'ordre via l'API Binance.
-        """
-        # Si le prompt n'est pas encore défini, on force la création de l'agent de sélection.
+        log_step("📡 Sélection du symbole via LLM...")
         if not self.selection_agent_prompt:
             self.selection_agent()
-        agent_prompt = self.selection_agent_prompt
+        if self.selection_agent_prompt is None:
+            raise Exception("\033[91m[ERREUR]\033[0m L'agent de sélection n'a pas pu être créé.")
 
-        # Appelle directement l'LLM avec le prompt construit
-        print("Appel au modèle LLM pour la sélection du symbole...")
-        response = self.llm.call(messages=[{"role": "user", "content": agent_prompt}])
-        # Extraction du symbole en prenant la dernière ligne de la réponse
-        if isinstance(response, dict):
-            full_text = response.get("message", {}).get("content", "").strip()
-        else:
-            full_text = response.strip()
-        lines = full_text.splitlines()
-        chosen_symbol = lines[-1].strip().upper()
+        response = self.llm.call(messages=[{"role": "user", "content": self.selection_agent_prompt}])
+        chosen_symbol = response.strip().splitlines()[-1].strip().upper()
+        log_step(f"🎯 Symbole sélectionné : \033[93m{chosen_symbol}\033[0m")
 
-        print("Le LLM a choisi :", chosen_symbol)
-
-        # Vérification et correction du symbole
         if "USDT" not in chosen_symbol:
-            chosen_symbol = f"{chosen_symbol}USDT"
-            print(f"Symbole ajusté : {chosen_symbol}")
+            chosen_symbol += "USDT"
+            log_step(f"🔧 Correction du symbole : {chosen_symbol}")
 
-        # Vérification du symbole pour respecter le format Binance
         if not re.fullmatch(r"^[A-Z0-9\-_.]{1,20}$", chosen_symbol):
-            raise Exception(f"Symbole invalide extrait : {chosen_symbol}")
+            raise Exception(f"\033[91m[ERREUR]\033[0m Symbole invalide : {chosen_symbol}")
 
-        # Récupérer les informations du symbole pour vérifier les restrictions de NOTIONAL et LOT_SIZE
-        symbol_info = self.client.get_symbol_info(chosen_symbol)
-        min_notional = None
-        min_qty = None
-        max_qty = None
-        step_size = None
+        log_step(f"🔍 Vérification des restrictions pour {chosen_symbol}...")
+        try:
+            symbol_info = self.client.get_symbol_info(chosen_symbol)
+            if not symbol_info:
+                raise ValueError(f"\033[91m[ERREUR]\033[0m Impossible de récupérer les informations pour {chosen_symbol}.")
+        except Exception as e:
+            log_step(f"\033[91m[ERREUR]\033[0m Échec de la récupération des informations pour {chosen_symbol} : {e}")
+            raise e
 
-        # Rechercher les filtres de NOTIONAL et LOT_SIZE
-        for filter in symbol_info['filters']:
+        min_notional, min_qty, max_qty, step_size = None, None, None, None
+        for filter in symbol_info.get('filters', []):
             if filter['filterType'] == 'NOTIONAL':
                 min_notional = float(filter['minNotional'])
             if filter['filterType'] == 'LOT_SIZE':
@@ -186,26 +155,26 @@ class TradingCrew:
                 max_qty = float(filter['maxQty'])
                 step_size = float(filter['stepSize'])
 
-        # Exemple : obtenir le prix actuel
         price = float(self.client.get_symbol_ticker(symbol=chosen_symbol)['price'])
+        min_quantity = max(min_qty, round(min_notional / price, 2))
+        total_value = min_quantity * price
 
-        # Calculer la quantité minimale requise pour respecter le min_notional
-        min_quantity = min_notional / price
-        min_quantity = round(min_quantity, 2)  # Arrondi à 2 décimales pour respecter les règles de quantité
+        if total_value < min_notional:
+            min_quantity = math.ceil(min_notional / price)
+            total_value = min_quantity * price
+            log_step(f"🔧 Ajustement de la quantité : {min_quantity} {chosen_symbol} pour respecter la contrainte NOTIONAL.")
 
-        # Vérifier si la quantité est en dehors des limites de lot
-        if min_quantity < min_qty:
-            min_quantity = min_qty  # Si la quantité est inférieure à la quantité minimale, ajuster
-        elif min_quantity > max_qty:
-            min_quantity = max_qty  # Si la quantité dépasse la quantité maximale, ajuster
+        if min_quantity > max_qty:
+            min_quantity = max_qty
 
-        # Arrondir la quantité à l'unité la plus proche autorisée par le step_size
         if step_size:
             min_quantity = math.floor(min_quantity / step_size) * step_size
 
-        print(f"Quantité ajustée pour respecter les restrictions du lot : {min_quantity} {chosen_symbol}")
+        log_step(f"💰 Quantité ajustée : {min_quantity} {chosen_symbol} (valeur totale : {total_value} USDT)")
 
-        # Créer l'ordre avec la quantité ajustée
+        # Log ajouté avant de passer la commande
+        log_step("📤 Envoi de la commande à Binance...")
+
         try:
             order = self.client.create_order(
                 symbol=chosen_symbol,
@@ -213,16 +182,20 @@ class TradingCrew:
                 type=Client.ORDER_TYPE_MARKET,
                 quantity=min_quantity
             )
+            log_step("\033[92m✔ Commande passée avec succès\033[0m")
+            print(json.dumps(order, indent=2))
         except Exception as e:
-            print("Erreur lors de la création de l'ordre :", e)
-            return
+            log_step(f"\033[91m[ERREUR]\033[0m Échec de la commande : {e}")
+            return Task(
+                config=self.tasks_config.get("execute_trade_task", {}),
+                output_file="trade_order.json",
+                description="Commande d'achat échouée",
+                expected_output=str(e)
+            )
 
         print("Commande passée :", json.dumps(order, indent=2))
         task_config = self.tasks_config.get("execute_trade_task", {})
-
-        # Sérialisation de l'ordre en chaîne de caractères
         order_str = json.dumps(order)
-
         return Task(
             config=task_config,
             output_file="trade_order.json",
@@ -231,10 +204,10 @@ class TradingCrew:
         )
 
 def main():
-    print("Démarrage de l'exécution du trading...")
+    log_step("🎬 Démarrage du trading...")
     crew_instance = TradingCrew()
     crew_instance.execute_trade_task()
-    print("Trading effectué avec succès.")
+    log_step("✅ Trading terminé avec succès.")
 
 if __name__ == '__main__':
     main()
